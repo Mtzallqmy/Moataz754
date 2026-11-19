@@ -1,17 +1,35 @@
-extends Node
-## WorldStreamingManager — يدير تحميل وتفريغ قطاعات العالم الثلاثين (15.0 كم) دون فقدان التصادم
+class_name WorldStreamingManager
+extends RefCounted
 
-const TOTAL_ROAD_LENGTH_M: float = 15000.0
-const CHUNK_LENGTH_M: float = 500.0
-const TOTAL_CHUNKS: int = 30
-const ACTIVE_RADIUS_CHUNKS: int = 3
+const CHUNK_LENGTH_M := 500.0
+const REGION_LENGTH_M := 2500.0
+const REGIONS := [
+	{"id": "taiz_highlands", "name": "مرتفعات تعز", "ground": "#86734d", "surface": "gravel"},
+	{"id": "naqil_alsahab", "name": "نقيل السحاب", "ground": "#8b786a", "surface": "rock"},
+	{"id": "wadi_alrayhan", "name": "وادي الريحان", "ground": "#7b8250", "surface": "dirt"},
+	{"id": "tihama_plains", "name": "سهول تهامة", "ground": "#9d966a", "surface": "grass"},
+	{"id": "coastal_highway", "name": "الطريق الساحلي", "ground": "#baa67b", "surface": "sand"},
+	{"id": "masalik_desert", "name": "صحراء المسالك", "ground": "#c0a477", "surface": "sand"},
+]
+const TOTAL_ROAD_LENGTH_M := 15000.0
 
-var active_chunk_id: int = 0
+var active_chunk_id := -1
 var loaded_chunks: Dictionary = {}
 
-func update_player_distance(distance_m: float) -> void:
-	var new_chunk: int = clampi(int(distance_m / CHUNK_LENGTH_M), 0, TOTAL_CHUNKS - 1)
-	active_chunk_id = new_chunk
-	for cid in range(TOTAL_CHUNKS):
-		var should_be_active: bool = absi(cid - active_chunk_id) <= ACTIVE_RADIUS_CHUNKS
-		loaded_chunks[cid] = should_be_active
+
+static func region_at(distance: float) -> Dictionary:
+	return REGIONS[clampi(int(distance / REGION_LENGTH_M), 0, REGIONS.size() - 1)]
+
+
+func update(distance: float, chunk_count: int, host: Node3D) -> void:
+	var next := clampi(int(distance / CHUNK_LENGTH_M), 0, chunk_count - 1)
+	if next == active_chunk_id:
+		return
+	active_chunk_id = next
+	for id in range(maxi(0, next - 2), mini(chunk_count, next + 3)):
+		if not loaded_chunks.has(id):
+			loaded_chunks[id] = host.build_sector(id)
+	for id: int in loaded_chunks.keys():
+		if absi(id - next) > 2:
+			loaded_chunks[id].queue_free()
+			loaded_chunks.erase(id)

@@ -1,16 +1,27 @@
 class_name MountainRoadGenerator
 extends Node3D
 
-@export var road_length_m := 2000.0
+const SECTOR_M := 500.0
+const TOWER := preload("res://assets/buildings/stone_tower.glb")
+const TERRAIN_OFFSETS := [-135.0, -69.0, -23.0, -4.8, 4.8, 23.0, 69.0, 135.0]
+
+@export var road_length_m := 15000.0
 @export var sample_step_m := 4.0
 @export var road_width_m := 9.6
 
 var road_points := PackedVector3Array()
 var across := PackedVector3Array()
+var stream := WorldStreamingManager.new()
+var asphalt := StandardMaterial3D.new()
+var _paint: StandardMaterial3D
+var _edge_paint: StandardMaterial3D
+var _sea: StandardMaterial3D
+var _gravel: StandardMaterial3D
 
 
 func _ready() -> void:
 	generate_mountain_pass()
+	load_near(20.0)
 
 
 func generate_mountain_pass() -> void:
@@ -18,36 +29,44 @@ func generate_mountain_pass() -> void:
 		return
 	var count := ceili(road_length_m / sample_step_m)
 	var horizontal := Vector3.ZERO
-	var heading := 0.0
 	for index in range(count + 1):
 		var distance := minf(index * sample_step_m, road_length_m)
-		var curve := smoothstep(125.0, 350.0, distance)
-		var elevation := curve * (distance * 0.065 + sin(distance * 0.011) * 10.0)
-		road_points.append(Vector3(horizontal.x, elevation, horizontal.z))
+		road_points.append(Vector3(horizontal.x, _altitude(distance), horizontal.z))
+		var heading := _heading(distance)
 		across.append(Vector3(cos(heading), 0.0, sin(heading)))
-		heading += curve * (0.004 * sin(distance * 0.0085) + 0.003 * sin(distance * 0.019)) * sample_step_m
 		horizontal += Vector3(sin(heading), 0.0, -cos(heading)) * sample_step_m
-
-	var asphalt := _material(Color("#30363d"))
-	var stone := _material(Color("#927a59"))
-	var paint := _material(Color("#e6c982"))
-	_strip("Asphalt", -road_width_m * 0.5, road_width_m * 0.5, asphalt, "asphalt")
-	_strip("RightShoulder", road_width_m * 0.5, 45.0, stone, "gravel", -2.5)
-	_strip("LeftShoulder", -45.0, -road_width_m * 0.5, stone, "gravel", -2.5)
-	_strip("CentreMarkings", -0.07, 0.07, paint, "", 0.015, true)
+	asphalt.albedo_color = Color("#383d41")
+	asphalt.roughness = 0.96
+	_paint = _material(Color("#e6c982"))
+	_edge_paint = _material(Color("#e5ddd1"))
+	_sea = _material(Color("#237489"))
+	_gravel = _material(Color("#504d42"))
 
 
-func lane_transform(distance: float, lateral := 0.0) -> Transform3D:
-	var index := clampi(int(distance / sample_step_m), 1, road_points.size() - 2)
-	var forward := (road_points[index + 1] - road_points[index - 1]).normalized()
-	var point := road_points[index] + across[index] * clampf(lateral, -3.0, 3.0) + Vector3.UP * 0.9
-	return Transform3D(Basis.looking_at(forward), point)
+func load_near(distance: float) -> void:
+	stream.update(distance, ceili(road_length_m / SECTOR_M), self)
 
 
-func nearest_sample(position: Vector3) -> int:
+func set_wetness(wetness: float) -> void:
+	asphalt.albedo_color = Color("#383d41").lerp(Color("#22292d"), wetness)
+	asphalt.roughness = lerpf(0.96, 0.47, wetness)
+
+
+func lane_transform(distance: float, lateral := 0.0, clearance := 0.9, reverse := false) -> Transform3D:
+	var index := clampi(int(distance / sample_step_m), 0, road_points.size() - 2)
+	var blend := clampf(distance / sample_step_m - index, 0.0, 1.0)
+	var forward := road_points[index + 1] - road_points[index]
+	var point := road_points[index].lerp(road_points[index + 1], blend)
+	point += across[index].lerp(across[index + 1], blend) * lateral + Vector3.UP * clearance
+	return Transform3D(Basis.looking_at(-forward if reverse else forward), point)
+
+
+func nearest_sample(position: Vector3, hint := -1) -> int:
 	var nearest := 0
 	var best := INF
-	for index in road_points.size():
+	var start := maxi(0, hint - 88) if hint >= 0 else 0
+	var finish := mini(road_points.size(), hint + 89) if hint >= 0 else road_points.size()
+	for index in range(start, finish):
 		var distance := position.distance_squared_to(road_points[index])
 		if distance < best:
 			nearest = index
@@ -55,38 +74,128 @@ func nearest_sample(position: Vector3) -> int:
 	return nearest
 
 
+func build_sector(sector_id: int) -> Node3D:
+	var sector := Node3D.new()
+	sector.name = "Sector%02d" % sector_id
+	add_child(sector)
+	var start := int(sector_id * SECTOR_M / sample_step_m)
+	var finish := mini(int((sector_id + 1) * SECTOR_M / sample_step_m), road_points.size() - 1)
+	var region := WorldStreamingManager.region_at(sector_id * SECTOR_M)
+	var land := _material(Color(region.ground))
+	var surface: String = region.surface
+	var desert: bool = region.id == "masalik_desert"
+	var road_material := _gravel if desert else asphalt
+	_strip(sector, "Road", start, finish, -4.8, 4.8, road_material, "gravel" if desert else "asphalt")
+	for band in range(TERRAIN_OFFSETS.size() - 1):
+		if band == 3:
+			continue
+		var left: float = TERRAIN_OFFSETS[band]
+		var right: float = TERRAIN_OFFSETS[band + 1]
+		var color := _material(Color(region.ground).darkened(0.12 * float(band % 3)))
+		var collision := surface if band in [1, 2, 4, 5] else ""
+		_strip(sector, "Terrain%d" % band, start, finish, left, right, color, collision, true)
+
+	if not desert:
+		_strip(sector, "Centerline", start, finish, -0.07, 0.07, _paint, "", false, 0.018, true)
+		_strip(sector, "LeftEdge", start, finish, -4.64, -4.54, _edge_paint, "", false, 0.019)
+		_strip(sector, "RightEdge", start, finish, 4.54, 4.64, _edge_paint, "", false, 0.019)
+	if region.id == "coastal_highway":
+		_strip(sector, "CoastalWater", start, finish, 126, 480, _sea, "", false, -4.0)
+	if region.id in ["taiz_highlands", "wadi_alrayhan", "tihama_plains"]:
+		for index in range(start + 17, finish - 6, 27):
+			if index < 26:
+				continue
+			var lateral := -16.0 - float((sector_id + index) % 4) * 3.0
+			var tower := TOWER.instantiate() as Node3D
+			sector.add_child(tower)
+			var placement := lane_transform(index * sample_step_m, lateral, _terrain_offset(index, lateral) - 0.45)
+			tower.transform = placement
+			tower.rotate_y(PI * 0.5)
+	_add_scenery(sector, start, finish, region.id, land)
+	return sector
+
+
+func _heading(distance: float) -> float:
+	var scale := smoothstep(95.0, 320.0, distance)
+	var mountain := smoothstep(2250.0, 2850.0, distance) * (1.0 - smoothstep(4700.0, 5300.0, distance))
+	return scale * (0.38 * sin(distance * 0.0041) + 0.2 * sin(distance * 0.012) + mountain * 0.62 * sin(distance * 0.013))
+
+
+func _altitude(distance: float) -> float:
+	if distance < 2500.0:
+		return smoothstep(125.0, 450.0, distance) * (distance * 0.047 + 8.0 * sin(distance * 0.007))
+	if distance < 5000.0:
+		var summit_progress := (distance - 2500.0) / 2500.0
+		return lerpf(109.7, 22.0, summit_progress) + sin(summit_progress * TAU) * 84.0
+	if distance < 10000.0:
+		return 22.0 * (1.0 - smoothstep(5000.0, 10000.0, distance)) + sin(distance * 0.014) * 1.4 * sin(PI * (distance - 5000.0) / 5000.0)
+	return smoothstep(12400.0, 12900.0, distance) * (6.0 + sin(distance * 0.012) * 4.0)
+
+
+func _terrain_offset(index: int, lateral: float) -> float:
+	var distance := index * sample_step_m
+	var outward := clampf((absf(lateral) - 4.8) / 118.0, 0.0, 1.0)
+	var highland := (1.0 - smoothstep(4600.0, 5500.0, distance)) * smoothstep(100.0, 570.0, distance)
+	var dunes := smoothstep(12300.0, 13100.0, distance)
+	var asymmetry := -1.0 if lateral > 0.0 else 1.0
+	var terrain := sin(distance * 0.007 + lateral * 0.032) + 0.44 * sin(distance * 0.023 - lateral * 0.091)
+	return -outward * 4.0 + outward * (terrain * (6.0 + highland * 28.0 + dunes * 9.0) + asymmetry * highland * 38.0)
+
+
 func _strip(
-	label: String, left: float, right: float, material: Material, surface: String,
-	decoration_height := 0.0, dashed := false
+	parent: Node3D, label: String, start: int, finish: int, left: float, right: float,
+	material: Material, surface: String, terrain := false, raise := 0.0, dashed := false
 ) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_material(material)
-	var left_height := decoration_height
-	var right_height := decoration_height
-	if not surface.is_empty():
-		left_height = decoration_height if left < -road_width_m * 0.5 else 0.0
-		right_height = decoration_height if right > road_width_m * 0.5 else 0.0
-	for index in range(road_points.size() - 1):
+	for index in range(start, finish):
 		if dashed and index % 2 == 1:
 			continue
-		var p0 := road_points[index]
-		var p1 := road_points[index + 1]
-		var a := p0 + across[index] * left + Vector3.UP * left_height
-		var b := p0 + across[index] * right + Vector3.UP * right_height
-		var c := p1 + across[index + 1] * left + Vector3.UP * left_height
-		var d := p1 + across[index + 1] * right + Vector3.UP * right_height
+		var a := _vertex(index, left, terrain, raise)
+		var b := _vertex(index, right, terrain, raise)
+		var c := _vertex(index + 1, left, terrain, raise)
+		var d := _vertex(index + 1, right, terrain, raise)
 		for vertex in [a, c, b, b, c, d]:
 			st.add_vertex(vertex)
 	st.generate_normals()
 	var instance := MeshInstance3D.new()
 	instance.name = label
 	instance.mesh = st.commit()
-	add_child(instance)
+	parent.add_child(instance)
 	if not surface.is_empty():
 		instance.create_trimesh_collision()
 		var body := instance.get_child(0) as StaticBody3D
 		body.set_meta("surface_type", surface)
+
+
+func _vertex(index: int, offset: float, terrain: bool, raise: float) -> Vector3:
+	var altitude := _terrain_offset(index, offset) if terrain else raise
+	return road_points[index] + across[index] * offset + Vector3.UP * altitude
+
+
+func _add_scenery(parent: Node3D, start: int, finish: int, region: String, land: Material) -> void:
+	var scatter := MultiMeshInstance3D.new()
+	var multimesh := MultiMesh.new()
+	var mesh := SphereMesh.new()
+	mesh.radial_segments = 6
+	mesh.rings = 4
+	mesh.material = _material(Color("#68704a")) if region in ["taiz_highlands", "wadi_alrayhan", "tihama_plains"] else land
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = mesh
+	multimesh.instance_count = floori((finish - start) / 3.0)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8851 + start
+	for index in multimesh.instance_count:
+		var sample := start + index * 3
+		var lateral := rng.randf_range(8.0, 38.0) * (1.0 if index % 2 else -1.0)
+		var height := rng.randf_range(0.5, 2.3)
+		var point := _vertex(sample, lateral, true, 0.0) + Vector3.UP * height * 0.24
+		var basis := Basis.from_scale(Vector3(height * 0.8, height, height * 0.76))
+		multimesh.set_instance_transform(index, Transform3D(basis, point))
+	scatter.multimesh = multimesh
+	scatter.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(scatter)
 
 
 func _material(color: Color) -> StandardMaterial3D:

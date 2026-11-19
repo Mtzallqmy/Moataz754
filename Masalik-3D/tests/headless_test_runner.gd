@@ -31,7 +31,7 @@ func _run() -> void:
 	await _ticks(120)
 	check(vehicle.wheel_raycasts.size() == 4 and vehicle.grounded_wheels == 4, "All four wheels contact the road at idle")
 	check(vehicle.linear_velocity.length() < 0.3, "Stable idle on flat ground")
-	check(road.road_points.size() > 400 and road.get_node("Asphalt").get_child(0) is StaticBody3D, "Road mesh has real collision")
+	check(road.road_points.size() > 400 and road.get_node("Sector00/Road").get_child(0) is StaticBody3D, "Road mesh has real collision")
 
 	var position := vehicle.global_position
 	vehicle.set_drive_inputs(1.0, 0, 0, false)
@@ -88,6 +88,8 @@ func _run() -> void:
 	hud._input(touch)
 	check(hud.throttle == 0.0 and hud._held.has("steer"), "Releasing pedal does not release wheel")
 
+	game.traffic.enabled = false
+	await _world_streaming(game)
 	await _proving_ground()
 	print("RESULT: %d failure(s)" % failures)
 	quit(0 if failures == 0 else 1)
@@ -156,3 +158,31 @@ func _proving_ground() -> void:
 		await process_frame
 	check(absf(acceleration.get("madina", 100.0) - acceleration.get("jabal", 100.0)) > 4.0, "Fleet acceleration differs by specification")
 	floor.queue_free()
+
+
+func _world_streaming(game: Node3D) -> void:
+	var road: MountainRoadGenerator = game.road
+	check(road.road_points.size() == 3751, "15 km route with 30 sectors has continuous sample data")
+	for distance in [2550.0, 5100.0, 7800.0, 10500.0, 13000.0, 14980.0]:
+		road.load_near(distance)
+		await _ticks(3)
+		var point := road.lane_transform(distance, 2.2, 0.0).origin
+		var probe := PhysicsRayQueryParameters3D.create(point + Vector3.UP * 10.0, point - Vector3.UP * 10.0, 1)
+		var hit := game.get_world_3d().direct_space_state.intersect_ray(probe)
+		check(not hit.is_empty() and absf(hit.position.y - point.y) < 0.45, "Loaded collision at %.0f m" % distance)
+		check(road.stream.loaded_chunks.size() <= 5, "Streaming window bounded at %.0f m" % distance)
+	road.load_near(20.0)
+	game._recover()
+	await _ticks(10)
+	var traffic: TrafficAIManager = game.traffic
+	traffic.enabled = true
+	await _ticks(34)
+	check(traffic.active_count() > 0 and traffic.active_count() <= traffic.density, "Traffic pool populates nearby lanes within density limit")
+	traffic.enabled = false
+	await _ticks(30)
+	check(traffic.active_count() == 0, "Traffic pool despawns all agents when disabled")
+	game.weather.configure("heavy_rain", "dawn")
+	game._update_world(0.2)
+	check(game.vehicle.wetness == 1.0 and game.road.asphalt.roughness < 0.6, "Rain updates physical traction input and surface material")
+	game.weather.configure("clear", "morning")
+	game._update_world(0.2)
