@@ -88,6 +88,7 @@ func _run() -> void:
 	hud._input(touch)
 	check(hud.throttle == 0.0 and hud._held.has("steer"), "Releasing pedal does not release wheel")
 
+	await _proving_ground()
 	print("RESULT: %d failure(s)" % failures)
 	quit(0 if failures == 0 else 1)
 
@@ -102,3 +103,56 @@ func check(condition: bool, description: String) -> bool:
 	if not condition:
 		failures += 1
 	return condition
+
+
+func _proving_ground() -> void:
+	var floor := StaticBody3D.new()
+	var floor_shape := CollisionShape3D.new()
+	var floor_size := BoxShape3D.new()
+	floor_size.size = Vector3(100.0, 0.5, 2900.0)
+	floor_shape.shape = floor_size
+	floor.add_child(floor_shape)
+	floor.position = Vector3(800.0, -0.25, -1350.0)
+	floor.set_meta("surface_type", "asphalt")
+	root.add_child(floor)
+
+	check(VehicleFleetRegistry.IDS.size() == 10, "Ten original vehicle IDs retained")
+	var fixture := load("res://scenes/vehicles/fleet_vehicle.tscn") as PackedScene
+	var acceleration: Dictionary = {}
+	for id in ["shahiq", "madina", "jabal"]:
+		var car := fixture.instantiate() as RaycastVehicleBody
+		car.vehicle_id = id
+		car.position = Vector3(800.0, 0.9, 0.0)
+		root.add_child(car)
+		await _ticks(120)
+		check(car.grounded_wheels == 4 and car.normal_load[0] > 500.0, "%s suspension bears load" % id)
+		car.set_drive_inputs(1, 0, 0, false)
+		var reaches_100 := -1.0
+		for tick in 2400:
+			await physics_frame
+			if tick == 299:
+				acceleration[id] = car.current_speed_kmh
+			if car.current_speed_kmh >= 100.0:
+				reaches_100 = (tick + 1) / 60.0
+				break
+		var stopped_at := car.global_position
+		var braking_from := car.current_speed_kmh
+		car.set_drive_inputs(0, 1, 0, false)
+		for tick in 300:
+			await physics_frame
+			if car.current_speed_kmh < 0.4:
+				break
+		print("MEASURE %s %.0f kg: 0–100 %.2f s, %.1f km/h after 5 s, stop %.1f m from %.1f km/h (%s, %.0f RPM)" % [
+			id, car.mass, reaches_100, acceleration.get(id, 100.0), stopped_at.distance_to(car.global_position), braking_from, car.powertrain.gear_label(), car.powertrain.rpm])
+		check(car.current_speed_kmh < 1.0, "%s brakes to rest" % id)
+		if id == "shahiq":
+			check(reaches_100 > 5.0 and reaches_100 < 40.0, "SUV reaches 100 km/h on the straight")
+			var normal_ratio := car.powertrain.ratio()
+			car.powertrain.mode = "4L"
+			check(is_equal_approx(car.powertrain.ratio() / normal_ratio, 2.55), "4L changes actual gear multiplication")
+			car.powertrain.mode = "2H"
+			check(car._drive_weights() == Vector4(0, 0, 0.5, 0.5), "2H routes torque to rear wheels")
+		car.queue_free()
+		await process_frame
+	check(absf(acceleration.get("madina", 100.0) - acceleration.get("jabal", 100.0)) > 4.0, "Fleet acceleration differs by specification")
+	floor.queue_free()

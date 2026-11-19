@@ -15,7 +15,6 @@ config/icon="res://assets/textures/icon.svg"
 
 PersistenceManager="*res://scripts/persistence/persistence_manager.gd"
 QualityManager="*res://scripts/core/game_manager.gd"
-VehicleFleetRegistry="*res://scripts/vehicles/vehicle_fleet_registry.gd"
 
 [display]
 
@@ -39,6 +38,7 @@ common/physics_ticks_per_second=60
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
 lights_and_shadows/directional_shadow/size=1024
 
 [input]

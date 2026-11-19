@@ -1,21 +1,18 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/mountain_road_generator.gd" id="1_world"]
-[ext_resource type="Script" path="res://scripts/physics/raycast_vehicle_body.gd" id="2_vehicle"]
 [ext_resource type="Script" path="res://scripts/core/camera_controller.gd" id="3_camera"]
 
 [ext_resource type="Script" path="res://scripts/core/drive_session.gd" id="4_session"]
-[ext_resource type="Script" path="res://scripts/vehicles/vehicle_visual.gd" id="5_visual"]
+
+[ext_resource type="PackedScene" path="res://scenes/vehicles/fleet_vehicle.tscn" id="6_fleet"]
 
 [sub_resource type="Environment" id="Environment_day"]
 background_mode = 1
 background_color = Color(0.41, 0.6, 0.77, 1)
-ambient_light_source = 3
+ambient_light_source = 2
 ambient_light_color = Color(0.69, 0.78, 0.89, 1)
 ambient_light_energy = 0.65
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_chassis"]
-size = Vector3(1.82, 0.75, 4.25)
 
 [node name="MainGame" type="Node3D"]
 script = ExtResource("4_session")
@@ -30,35 +27,7 @@ shadow_enabled = true
 [node name="SummitRoadWorld" type="Node3D" parent="."]
 script = ExtResource("1_world")
 
-[node name="SUV4x4" type="RigidBody3D" parent="." node_paths=PackedStringArray("wheel_raycasts")]
-collision_layer = 2
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, -20)
-mass = 1880.0
-script = ExtResource("2_vehicle")
-wheel_raycasts = [NodePath("RayFL"), NodePath("RayFR"), NodePath("RayRL"), NodePath("RayRR")]
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="SUV4x4"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.47, 0)
-shape = SubResource("BoxShape3D_chassis")
-
-[node name="RayFL" type="RayCast3D" parent="SUV4x4"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.96, 0.46, -1.35)
-target_position = Vector3(0, -1.06, 0)
-
-[node name="RayFR" type="RayCast3D" parent="SUV4x4"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.96, 0.46, -1.35)
-target_position = Vector3(0, -1.06, 0)
-
-[node name="RayRL" type="RayCast3D" parent="SUV4x4"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.96, 0.46, 1.35)
-target_position = Vector3(0, -1.06, 0)
-
-[node name="RayRR" type="RayCast3D" parent="SUV4x4"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.96, 0.46, 1.35)
-target_position = Vector3(0, -1.06, 0)
-
-[node name="VehicleVisual" type="Node3D" parent="SUV4x4"]
-script = ExtResource("5_visual")
+[node name="SUV4x4" parent="." instance=ExtResource("6_fleet")]
 
 [node name="MainCamera3D" type="Camera3D" parent="." node_paths=PackedStringArray("target_vehicle")]
 transform = Transform3D(1, 0, 0, 0, 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 4.2, -6.5)

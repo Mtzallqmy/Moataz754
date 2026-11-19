@@ -8,3 +8,5 @@ coverage/
 !.env.example
 /Masalik-3D/.godot/
 /Masalik-3D/.android/
+/Masalik-3D/android/build/
+/Masalik-3D/android/.build_version
