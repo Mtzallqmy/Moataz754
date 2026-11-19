@@ -10,6 +10,8 @@ extends RigidBody3D
 var throttle_input: float = 0.0
 var brake_input: float = 0.0
 var steer_input: float = 0.0
+var drive_direction := 1
+var grounded_wheels := 0
 var handbrake_active: bool = false
 
 var current_steer_rad: float = 0.0
@@ -21,6 +23,7 @@ var current_surface: String = "asphalt"
 func _ready() -> void:
 	if config == null:
 		config = VehiclePhysicsConfig.new()
+	assert(wheel_raycasts.size() == 4, "Bind the four wheel rays in scene order FL, FR, RL, RR")
 	mass = config.mass_kg
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = config.center_of_mass_offset
@@ -41,7 +44,8 @@ func _physics_process(delta: float) -> void:
 
 	var compressions: Array[float] = [0.0, 0.0, 0.0, 0.0]
 
-	for i in range(min(4, wheel_raycasts.size())):
+	grounded_wheels = 0
+	for i in wheel_raycasts.size():
 		var ray: RayCast3D = wheel_raycasts[i]
 		var is_front: bool = (i < 2)
 		if is_front:
@@ -51,6 +55,7 @@ func _physics_process(delta: float) -> void:
 		ray.force_raycast_update()
 
 		if ray.is_colliding():
+			grounded_wheels += 1
 			var hit_point: Vector3 = ray.get_collision_point()
 			var hit_normal: Vector3 = ray.get_collision_normal()
 			var collider: Object = ray.get_collider()
@@ -58,7 +63,7 @@ func _physics_process(delta: float) -> void:
 
 			if collider and collider.has_meta("surface_type"):
 				current_surface = str(collider.get_meta("surface_type"))
-				if current_surface == "dirt":
+				if current_surface in ["dirt", "gravel"]:
 					surface_mu = config.dirt_friction
 
 			var ray_origin: Vector3 = ray.global_position
@@ -75,35 +80,34 @@ func _physics_process(delta: float) -> void:
 			)
 			var spring_force_vec: Vector3 = hit_normal * spring_force_mag
 
-			var wheel_forward: Vector3 = -ray.global_transform.basis.z
-			var wheel_right: Vector3 = ray.global_transform.basis.x
+			var wheel_forward := (-ray.global_transform.basis.z).slide(hit_normal).normalized()
+			var wheel_right := wheel_forward.cross(hit_normal).normalized()
 			var point_offset: Vector3 = hit_point - global_position
 			var point_vel: Vector3 = linear_velocity + angular_velocity.cross(point_offset)
 
 			var long_force_mag: float = 0.0
-			if throttle_input > 0.01:
-				long_force_mag += throttle_input * (config.max_engine_force * 0.25) * surface_mu
-			if brake_input > 0.01:
-				if forward_speed > 0.8:
-					long_force_mag -= brake_input * (config.max_brake_force * 0.25) * surface_mu
-				else:
-					long_force_mag -= brake_input * (config.max_reverse_force * 0.25) * surface_mu
+			var wheel_speed := point_vel.dot(wheel_forward)
+			if throttle_input > 0.01 and brake_input < 0.01:
+				var drive_force := config.max_engine_force if drive_direction == 1 else config.max_reverse_force
+				long_force_mag = drive_direction * throttle_input * drive_force * 0.25
+			var brake_force := brake_input * config.max_brake_force * 0.25
 			if handbrake_active and not is_front:
-				long_force_mag -= signf(forward_speed) * (config.handbrake_force * 0.5) * surface_mu
-
+				brake_force += config.handbrake_force * 0.5
+			long_force_mag -= clampf(wheel_speed * mass / (4.0 * delta), -brake_force, brake_force)
 			var long_force_vec: Vector3 = wheel_forward * long_force_mag
 
 			var lateral_vel: float = point_vel.dot(wheel_right)
 			var lat_force_mag: float = -lateral_vel * config.cornering_stiffness * surface_mu * 0.25
 			var lat_force_vec: Vector3 = wheel_right * lat_force_mag
 
-			apply_force(spring_force_vec + long_force_vec + lat_force_vec, point_offset)
+			var grip := spring_force_mag * surface_mu
+			apply_force(spring_force_vec + (long_force_vec + lat_force_vec).limit_length(grip), point_offset)
 
 			if i < visual_wheel_nodes.size() and visual_wheel_nodes[i] != null:
 				var w_node: Node3D = visual_wheel_nodes[i]
-				w_node.position.y = -dist
+				w_node.position.y = ray.position.y - dist
 				w_node.rotation.y = -current_steer_rad if is_front else 0.0
-				wheel_spin_rad[i] -= (forward_speed / config.wheel_radius) * delta
+				wheel_spin_rad[i] -= (wheel_speed / config.wheel_radius) * delta
 				w_node.rotation.x = wheel_spin_rad[i]
 		else:
 			prev_compression[i] = 0.0
@@ -112,3 +116,9 @@ func _physics_process(delta: float) -> void:
 	var rear_roll_diff: float = compressions[2] - compressions[3]
 	var anti_roll_torque: Vector3 = global_transform.basis.z * ((front_roll_diff + rear_roll_diff) * config.anti_roll_stiffness)
 	apply_torque(anti_roll_torque)
+
+
+func reset_wheels() -> void:
+	prev_compression.fill(0.0)
+	wheel_spin_rad.fill(0.0)
+	sleeping = false

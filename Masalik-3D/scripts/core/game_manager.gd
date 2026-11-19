@@ -6,6 +6,7 @@ enum QualityPreset { LOW, MEDIUM, HIGH }
 var current_quality: QualityPreset = QualityPreset.HIGH
 var mission_elapsed_sec: float = 0.0
 var mission_active: bool = false
+var resume_drive := false
 
 func apply_quality_preset(preset: QualityPreset) -> void:
 	current_quality = preset

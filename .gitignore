@@ -6,3 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
+/Masalik-3D/.godot/
+/Masalik-3D/.android/
