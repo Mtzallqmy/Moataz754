@@ -6,6 +6,14 @@ var headlights: StandardMaterial3D
 var brake_lamps: StandardMaterial3D
 var reverse_lamps: StandardMaterial3D
 var high_beams := false
+var turn_signal := 0
+var wipers := false
+var cockpit_mount: Marker3D
+var _wheel_input: Node3D
+var _wiper_arm: Node3D
+var _left_signal: StandardMaterial3D
+var _right_signal: StandardMaterial3D
+var _phase := 0.0
 var lights_on := false
 var _headlight_spot: SpotLight3D
 
@@ -17,12 +25,16 @@ func _ready() -> void:
 	var spec: Dictionary = VehicleFleetRegistry.FLEET_SPECS[id]
 	paint = _material(Color(spec.paint), 0.34, 0.35)
 	var trim := _material(Color("#202932"), 0.0, 0.74)
-	var glass := _material(Color("#344e60"), 0.5, 0.2)
+	var glass := _material(Color(0.32, 0.49, 0.56, 0.27), 0.23, 0.2)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var steel := _material(Color("#83929a"), 0.65, 0.3)
 	var rubber := _material(Color("#171919"), 0.0, 0.94)
 	headlights = _material(Color("#eddbac"), 0.1, 0.32)
 	brake_lamps = _material(Color("#9f2433"), 0.05, 0.25)
 	reverse_lamps = _material(Color("#c3cbc7"), 0.05, 0.25)
+	_left_signal = _material(Color("#b96723"), 0.08, 0.42)
+	_right_signal = _material(Color("#b96723"), 0.08, 0.42)
 	var width := config.width
 	var length := config.length
 	var roof := config.roof_height
@@ -40,7 +52,14 @@ func _ready() -> void:
 		cabin_center = -length * 0.18
 		cabin_length = length * 0.44
 	_box(self, Vector3(width, waist - 0.13, length), Vector3(0, (0.13 + waist) * 0.5, 0), paint)
-	_box(self, Vector3(width * 0.9, roof - waist, cabin_length), Vector3(0, (waist + roof) * 0.5, cabin_center), glass)
+	var glass_y := (waist + roof) * 0.5
+	var cabin_front := cabin_center - cabin_length * 0.5
+	var cabin_back := cabin_center + cabin_length * 0.5
+	_box(self, Vector3(width * 0.89, roof - waist, 0.023), Vector3(0, glass_y, cabin_front), glass)
+	_box(self, Vector3(width * 0.89, roof - waist, 0.023), Vector3(0, glass_y, cabin_back), glass)
+	for side in [-1.0, 1.0]:
+		_box(self, Vector3(0.023, roof - waist, cabin_length), Vector3(side * width * 0.445, glass_y, cabin_center), glass)
+	_add_interior(width, roof, waist, cabin_front, cabin_length, trim, steel)
 	_box(self, Vector3(width * 0.94, 0.105, cabin_length * 1.035), Vector3(0, roof, cabin_center), paint)
 	_box(self, Vector3(width * 0.96, 0.08, length * 0.87), Vector3(0, waist - 0.018, 0), paint)
 	var column_count := 5 if id == "hafilat" else 3
@@ -50,6 +69,9 @@ func _ready() -> void:
 			_box(self, Vector3(0.07, roof - waist, 0.085), Vector3(side * width * 0.45, (roof + waist) * 0.5, column), paint)
 		_box(self, Vector3(width * 0.21, 0.13 if not tall else 0.19, 0.025), Vector3(side * width * 0.34, waist * 0.81, -length * 0.5 - 0.018), headlights)
 		_box(self, Vector3(width * 0.10, 0.18, 0.026), Vector3(side * width * 0.41, waist * 0.83, length * 0.5 + 0.018), brake_lamps)
+		var signal_finish := _left_signal if side < 0.0 else _right_signal
+		for end in [-1.0, 1.0]:
+			_box(self, Vector3(width * 0.075, 0.08, 0.04), Vector3(side * width * 0.44, waist * 0.66, end * (length * 0.5 + 0.02)), signal_finish)
 		_box(self, Vector3(width * 0.047, 0.085, 0.026), Vector3(side * width * 0.31, waist * 0.76, length * 0.5 + 0.018), reverse_lamps)
 		_box(self, Vector3(width * 0.11, 0.12, 0.22), Vector3(side * width * 0.54, waist + 0.15, cabin_center - cabin_length * 0.34), trim)
 		if pickup:
@@ -75,7 +97,7 @@ func _ready() -> void:
 	_headlight_spot.hide()
 	for ray in vehicle.wheel_raycasts:
 		var hub := Node3D.new()
-		hub.position = ray.position
+		hub.position = ray.position - Vector3.UP * (config.suspension_rest_length - config.mass_kg * 2.4525 / config.spring_stiffness)
 		add_child(hub)
 		var axle := Node3D.new()
 		hub.add_child(axle)
@@ -95,6 +117,40 @@ func _ready() -> void:
 		_box(axle, Vector3(0.33, 0.038, 0.48), Vector3.ZERO, trim)
 		wheels.append(hub)
 	vehicle.visual_wheel_nodes = wheels
+
+
+func _add_interior(width: float, roof: float, waist: float, front: float, cabin_length: float, trim: Material, steel: Material) -> void:
+	var span := roof - waist
+	_box(self, Vector3(width * 0.88, 0.13, 0.3), Vector3(0, waist + span * 0.16, front + 0.15), trim)
+	for side in [-1.0, 1.0]:
+		_box(self, Vector3(width * 0.30, 0.16, 0.40), Vector3(side * width * 0.24, waist + 0.05, front + cabin_length * 0.48), trim)
+		_box(self, Vector3(width * 0.28, span * 0.85, 0.12), Vector3(side * width * 0.24, waist + span * 0.39, front + cabin_length * 0.63), trim)
+	cockpit_mount = Marker3D.new()
+	cockpit_mount.position = Vector3(-width * 0.24, waist + span * 0.71, front + cabin_length * 0.35)
+	add_child(cockpit_mount)
+	_wheel_input = Node3D.new()
+	_wheel_input.position = Vector3(-width * 0.24, waist + span * 0.23, front + cabin_length * 0.24)
+	add_child(_wheel_input)
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.13
+	ring.outer_radius = 0.167
+	ring.rings = 12
+	ring.ring_segments = 9
+	_mesh(_wheel_input, ring, Vector3.ZERO, trim).rotation.x = PI * 0.41
+	_box(_wheel_input, Vector3(0.28, 0.035, 0.03), Vector3.ZERO, steel)
+	_wiper_arm = Node3D.new()
+	_wiper_arm.position = Vector3(-width * 0.08, waist + 0.04, front - 0.038)
+	add_child(_wiper_arm)
+	_box(_wiper_arm, Vector3(width * 0.32, 0.029, 0.022), Vector3(width * 0.16, 0.0, 0.0), trim)
+
+
+func animate_controls(delta: float, steering: float) -> void:
+	_phase = fposmod(_phase + delta, 20.0)
+	var blink := fposmod(_phase, 0.8) < 0.4
+	_emission(_left_signal, Color("#ff9d32"), blink and turn_signal in [-1, 2])
+	_emission(_right_signal, Color("#ff9d32"), blink and turn_signal in [1, 2])
+	_wiper_arm.rotation.z = (sin(_phase * 6.0) + 1.0) * 0.53 if wipers else 0.0
+	_wheel_input.rotation.z = -steering * 2.0
 
 
 func set_lights(braking: bool, reversing: bool) -> void:

@@ -1,7 +1,11 @@
 class_name MountainRoadGenerator
 extends Node3D
 
-const SECTOR_M := 500.0
+const SECTOR_M := WorldStreamingManager.CHUNK_LENGTH_M
+const BRIDGE_START := 10800.0
+const BRIDGE_END := 10976.0
+const TUNNEL_START := 3620.0
+const TUNNEL_END := 3732.0
 const TOWER := preload("res://assets/buildings/stone_tower.glb")
 const TERRAIN_OFFSETS := [-135.0, -69.0, -23.0, -4.8, 4.8, 23.0, 69.0, 135.0]
 
@@ -17,6 +21,8 @@ var _paint: StandardMaterial3D
 var _edge_paint: StandardMaterial3D
 var _sea: StandardMaterial3D
 var _gravel: StandardMaterial3D
+var _concrete: StandardMaterial3D
+var _barrier: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -41,6 +47,8 @@ func generate_mountain_pass() -> void:
 	_edge_paint = _material(Color("#e5ddd1"))
 	_sea = _material(Color("#237489"))
 	_gravel = _material(Color("#504d42"))
+	_concrete = _material(Color("#81796c"))
+	_barrier = _material(Color("#b1a489"))
 
 
 func load_near(distance: float) -> void:
@@ -99,7 +107,12 @@ func build_sector(sector_id: int) -> Node3D:
 		_strip(sector, "Centerline", start, finish, -0.07, 0.07, _paint, "", false, 0.018, true)
 		_strip(sector, "LeftEdge", start, finish, -4.64, -4.54, _edge_paint, "", false, 0.019)
 		_strip(sector, "RightEdge", start, finish, 4.54, 4.64, _edge_paint, "", false, 0.019)
+	if region.id == "naqil_alsahab":
+		_build_tunnel(sector, start, finish)
+	if region.id in ["taiz_highlands", "naqil_alsahab"]:
+		_wall(sector, "Guardrail", maxi(start, ceili(410.0 / sample_step_m)), finish, 4.91, 0.18, 0.69, _barrier)
 	if region.id == "coastal_highway":
+		_build_bridge(sector, start, finish)
 		_strip(sector, "CoastalWater", start, finish, 126, 480, _sea, "", false, -4.0)
 	if region.id in ["taiz_highlands", "wadi_alrayhan", "tihama_plains"]:
 		for index in range(start + 17, finish - 6, 27):
@@ -129,7 +142,8 @@ func _altitude(distance: float) -> float:
 		return lerpf(109.7, 22.0, summit_progress) + sin(summit_progress * TAU) * 84.0
 	if distance < 10000.0:
 		return 22.0 * (1.0 - smoothstep(5000.0, 10000.0, distance)) + sin(distance * 0.014) * 1.4 * sin(PI * (distance - 5000.0) / 5000.0)
-	return smoothstep(12400.0, 12900.0, distance) * (6.0 + sin(distance * 0.012) * 4.0)
+	var bridge_profile := smoothstep(10712.0, BRIDGE_START, distance) * (1.0 - smoothstep(BRIDGE_END, 11065.0, distance))
+	return bridge_profile * 3.8 + smoothstep(12400.0, 12900.0, distance) * (6.0 + sin(distance * 0.012) * 4.0)
 
 
 func _terrain_offset(index: int, lateral: float) -> float:
@@ -150,6 +164,9 @@ func _strip(
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_material(material)
 	for index in range(start, finish):
+		var distance := (index + 0.5) * sample_step_m
+		if terrain and distance >= BRIDGE_START and distance < BRIDGE_END:
+			continue
 		if dashed and index % 2 == 1:
 			continue
 		var a := _vertex(index, left, terrain, raise)
@@ -167,6 +184,77 @@ func _strip(
 		instance.create_trimesh_collision()
 		var body := instance.get_child(0) as StaticBody3D
 		body.set_meta("surface_type", surface)
+
+
+func _build_bridge(sector: Node3D, start: int, finish: int) -> void:
+	var first := maxi(start, ceili(BRIDGE_START / sample_step_m))
+	var last := mini(finish, floori(BRIDGE_END / sample_step_m))
+	if first >= last:
+		return
+	_strip(sector, "Estuary", first, last, -145.0, 145.0, _sea, "", false, -4.3)
+	_wall(sector, "BridgeRailingLeft", first, last, -4.87, -0.56, 0.92, _concrete)
+	_wall(sector, "BridgeRailingRight", first, last, 4.87, -0.56, 0.92, _concrete)
+	for index in range(first + 6, last, 9):
+		var p := lane_transform(index * sample_step_m, 0.0, -2.1)
+		_box(sector, p, Vector3(8.3, 4.2, 1.2), _concrete)
+
+
+func _build_tunnel(sector: Node3D, start: int, finish: int) -> void:
+	var first := maxi(start, ceili(TUNNEL_START / sample_step_m))
+	var last := mini(finish, floori(TUNNEL_END / sample_step_m))
+	if first >= last:
+		return
+	_wall(sector, "TunnelLeft", first, last, -5.1, -0.20, 5.2, _concrete)
+	_wall(sector, "TunnelRight", first, last, 5.1, -0.20, 5.2, _concrete)
+	var roof := _material(Color("#45403b"))
+	roof.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_strip(sector, "TunnelRoof", first, last, -5.12, 5.12, roof, "", false, 5.2)
+	for index in range(first + 5, last, 8):
+		var path := lane_transform(index * sample_step_m, 0.0, 4.98)
+		var lamp := _material(Color("#c3a47e"))
+		lamp.emission_enabled = true
+		lamp.emission = Color("#f1ca92")
+		_box(sector, path, Vector3(2.6, 0.12, 0.21), lamp)
+
+
+func _wall(parent: Node3D, label: String, first: int, last: int, offset: float, bottom: float, top: float, material: StandardMaterial3D) -> void:
+	if first >= last:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var finish := material.duplicate() as StandardMaterial3D
+	finish.cull_mode = BaseMaterial3D.CULL_DISABLED
+	st.set_material(finish)
+	for index in range(first, last):
+		var a := _vertex(index, offset, false, bottom)
+		var b := _vertex(index + 1, offset, false, bottom)
+		var c := a + Vector3.UP * (top - bottom)
+		var d := b + Vector3.UP * (top - bottom)
+		for vertex in [a, c, b, b, c, d]:
+			st.add_vertex(vertex)
+	st.generate_normals()
+	var section := MeshInstance3D.new()
+	section.name = label
+	section.mesh = st.commit()
+	parent.add_child(section)
+	var shape := section.mesh.create_trimesh_shape()
+	shape.backface_collision = true
+	var body := StaticBody3D.new()
+	body.collision_layer = 8
+	var collider := CollisionShape3D.new()
+	collider.shape = shape
+	body.add_child(collider)
+	section.add_child(body)
+
+
+func _box(parent: Node3D, placement: Transform3D, dimensions: Vector3, finish: StandardMaterial3D) -> void:
+	var instance := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	mesh.material = finish
+	instance.mesh = mesh
+	instance.transform = placement
+	parent.add_child(instance)
 
 
 func _vertex(index: int, offset: float, terrain: bool, raise: float) -> Vector3:

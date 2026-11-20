@@ -91,6 +91,11 @@ func _run() -> void:
 	game.traffic.enabled = false
 	await _world_streaming(game)
 	await _proving_ground()
+	await _grade_and_surfaces(game)
+	await _player_experience(game)
+	current_scene.queue_free()
+	await process_frame
+	await process_frame
 	print("RESULT: %d failure(s)" % failures)
 	quit(0 if failures == 0 else 1)
 
@@ -163,7 +168,7 @@ func _proving_ground() -> void:
 func _world_streaming(game: Node3D) -> void:
 	var road: MountainRoadGenerator = game.road
 	check(road.road_points.size() == 3751, "15 km route with 30 sectors has continuous sample data")
-	for distance in [2550.0, 5100.0, 7800.0, 10500.0, 13000.0, 14980.0]:
+	for distance in [2550.0, 3650.0, 5100.0, 7800.0, 10870.0, 13000.0, 14980.0]:
 		road.load_near(distance)
 		await _ticks(3)
 		var point := road.lane_transform(distance, 2.2, 0.0).origin
@@ -186,3 +191,174 @@ func _world_streaming(game: Node3D) -> void:
 	check(game.vehicle.wetness == 1.0 and game.road.asphalt.roughness < 0.6, "Rain updates physical traction input and surface material")
 	game.weather.configure("clear", "morning")
 	game._update_world(0.2)
+
+
+func _player_experience(game: Node3D) -> void:
+	var persistence := root.get_node("PersistenceManager")
+	game._toggle_map()
+	var map: RouteMap = game.hud._overlay.get_child(0).get_child(0)
+	check(map.road == game.road and paused, "Offline map opens and pauses driving")
+	map.waypoint_selected.emit(740.0)
+	check(game._waypoint == 740.0 and map.target_distance == 740.0, "Map selects a local route destination")
+	game.hud._overlay.get_child(0).get_child(-1).pressed.emit()
+	check(not paused, "Closing map resumes driving")
+	var camera: MasalikCameraController = game.camera
+	var views: Dictionary = {}
+	for index in 6:
+		views[camera.current_view] = true
+		camera.cycle_camera_view()
+	check(views.size() == 6, "Six in-game camera views are available")
+
+	game._save()
+	check(persistence.save_data.has_driven and FileAccess.file_exists(persistence.SAVE_PATH_PRIMARY), "Free drive writes a native save")
+	game._return_to_menu()
+	await process_frame
+	await process_frame
+	var menu := current_scene
+	check(not menu.get_node("%Continue").disabled, "Returning to the menu exposes continue")
+	menu.call("_show_garage")
+	await process_frame
+	var garage: Node = menu.get("_garage")
+	check(garage.get("_model").vehicle_id == "shahiq", "Garage opens with the selected 3D vehicle")
+	garage.call("_select", 3)
+	check(garage.get("_model").vehicle_id == "madina", "Garage previews another vehicle ID")
+	garage.call("_select", 0)
+	garage.call("_cycle_paint")
+	check(persistence.save_data.vehicle_customizations.has("shahiq"), "Garage paint is persistent")
+	menu.call("_close_detail")
+	menu.call("_show_settings")
+	check(menu.get("_body").get_child_count() > 10, "Settings exposes functional controls")
+	menu.call("_close_detail")
+	var resume := menu.get_node("%Continue") as Button
+	resume.pressed.emit()
+	await process_frame
+	await process_frame
+	game = current_scene
+	check(game.road.stream.loaded_chunks.has(int(game.drive_distance / 500.0)), "Continue restores road collision before spawning")
+
+	game._return_to_menu()
+	await process_frame
+	await process_frame
+	menu = current_scene
+	check(MissionCatalog.STORY.size() == 25 and MissionCatalog.ACTIVITIES.size() == 6, "Five chapters and six bonus activities are available")
+	var school := MissionCatalog.find("school_01")
+	menu.call("_start_mission", school)
+	await process_frame
+	await process_frame
+	game = current_scene
+	check(game.mission != null and game.mission.spec.id == "school_01", "Menu starts driving-school mission")
+	game._save()
+	check(persistence.save_data.active_attempt.get("id") == "school_01", "An unfinished mission saves its checkpoint state")
+	game._return_to_menu()
+	await process_frame
+	await process_frame
+	current_scene.get_node("%Continue").pressed.emit()
+	await process_frame
+	await process_frame
+	game = current_scene
+	check(game.mission != null and game.mission.spec.id == "school_01" and game.mission.next_gate == 0, "Continue reopens the saved mission")
+	await _ticks(90)
+	for index in 1800:
+		if paused:
+			break
+		var distance: float = game.vehicle.global_position.z * -1.0
+		if distance >= 101.5:
+			Input.action_release("drive_accelerate")
+			Input.action_press("drive_brake", 0.88)
+		elif distance < 99.0 and game.vehicle.current_speed_kmh < 32.0:
+			Input.action_press("drive_accelerate", 0.53)
+		else:
+			Input.action_release("drive_accelerate")
+		await physics_frame
+	Input.action_release("drive_accelerate")
+	Input.action_release("drive_brake")
+	check(paused and game.mission.outcome == MissionRun.Outcome.COMPLETED, "Vehicle drives all school checkpoints and stops at the finish")
+	check(persistence.save_data.best_records.has("school_01") and persistence.save_data.credits >= 140, "Mission completion writes records and credits")
+	check(persistence.save_data.active_attempt.is_empty(), "Completed mission clears the saved attempt")
+	print("MEASURE driving school: %.2f s, gates %d/%d" % [game.mission.elapsed, game.mission.next_gate, game.mission.gates.size()])
+	paused = false
+
+	persistence.save_data_atomic()
+	var saved_credits: int = persistence.save_data.credits
+	var staging := FileAccess.open(persistence.SAVE_PATH_PRIMARY + ".tmp", FileAccess.WRITE)
+	staging.store_string("staged runtime data interrupted mid-write")
+	staging.close()
+	persistence.load_data()
+	check(persistence.save_data.credits == saved_credits, "Interrupted staging write leaves the primary save intact")
+	var damaged := FileAccess.open(persistence.SAVE_PATH_PRIMARY, FileAccess.WRITE)
+	damaged.store_string("invalid primary")
+	damaged.close()
+	persistence.save_data.credits = -1
+	persistence.load_data()
+	check(persistence.save_data.credits == saved_credits and persistence._read_v2(persistence.SAVE_PATH_PRIMARY).size() > 0, "Invalid primary recovers from the previous valid backup")
+	var imported := JSON.stringify({
+		"schemaVersion": 2, "selectedVehicleId": "saqr", "unlockedVehicles": ["shahiq", "saqr"],
+		"masalikCoins": 5000, "driverXp": 300, "playerDistanceM": 1250,
+		"missionBestTimesSec": {"story_c1_m1": 73.4}, "missionCompletions": {"story_c1_m1": 1},
+	})
+	check(persistence.import_save_text(imported), "Native save manager imports a web schema v2 export")
+	check(persistence.save_data.credits == 5000 and persistence.own_vehicle("saqr") and persistence.save_data.best_records.has("school_01"), "Import retains native records while adding web progression")
+
+
+func _grade_and_surfaces(game: Node3D) -> void:
+	var floor := StaticBody3D.new()
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(50.0, 0.5, 280.0)
+	collision.shape = shape
+	floor.add_child(collision)
+	var slope := Basis(Vector3.RIGHT, deg_to_rad(8.0))
+	floor.transform = Transform3D(slope, Vector3(900.0, 200.0, -130.0))
+	floor.set_meta("surface_type", "asphalt")
+	root.add_child(floor)
+	var fixture := load("res://scenes/vehicles/fleet_vehicle.tscn") as PackedScene
+	var car := fixture.instantiate() as RaycastVehicleBody
+	car.transform = Transform3D(slope, floor.to_global(Vector3(0, 1.15, 75.0)))
+	root.add_child(car)
+	car.set_drive_inputs(0, 1, 0, false)
+	await _ticks(100)
+	var initial := car.global_position
+	car.powertrain.mode = "4L"
+	car.set_drive_inputs(0.8, 0, 0, false)
+	await _ticks(210)
+	var rise := car.global_position.y - initial.y
+	var climb := -car.global_position.z + initial.z
+	check(rise > 0.8 and climb > 8.0 and car.grounded_wheels >= 3, "SUV climbs the 8° test slope in low range")
+	print("MEASURE uphill: %.1f m horizontal, %.1f m rise in 3.5 s" % [climb, rise])
+
+	car.global_transform = Transform3D(slope.rotated(slope.y, PI), floor.to_global(Vector3(0, 1.15, -76.0)))
+	car.linear_velocity = Vector3.ZERO
+	car.angular_velocity = Vector3.ZERO
+	car.reset_wheels()
+	car.powertrain.mode = "4H"
+	car.set_drive_inputs(0, 0, 0, false)
+	car.hdc_enabled = true
+	await _ticks(360)
+	var downhill := car.current_speed_kmh
+	print("MEASURE HDC on 8° slope after 6 s: %.1f km/h" % downhill)
+	check(downhill > 2.0 and downhill < 17.0, "Hill descent keeps chassis speed bounded")
+	car.queue_free()
+	await process_frame
+
+	floor.transform = Transform3D(Basis.IDENTITY, Vector3(900.0, 100.0, -120.0))
+	var speeds: Dictionary = {}
+	for surface in ["asphalt", "sand", "mud"]:
+		floor.set_meta("surface_type", surface)
+		car = fixture.instantiate() as RaycastVehicleBody
+		car.position = Vector3(900.0, 101.0, -10.0)
+		root.add_child(car)
+		await _ticks(90)
+		car.set_drive_inputs(1, 0, 0, false)
+		await _ticks(230)
+		speeds[surface] = car.current_speed_kmh
+		check(car.current_surface == surface, "Wheel rays identify %s" % surface)
+		car.queue_free()
+		await process_frame
+	print("MEASURE surface speeds after 3.83 s: asphalt %.1f, sand %.1f, mud %.1f km/h" % [speeds.asphalt, speeds.sand, speeds.mud])
+	check(speeds.asphalt - speeds.sand > 3.0 and speeds.asphalt - speeds.mud > 3.0, "Sand and mud measurably reduce traction")
+	floor.queue_free()
+
+	game.vehicle.global_basis = game.vehicle.global_basis.rotated(Vector3.BACK, PI)
+	game._recover()
+	await _ticks(90)
+	check(game.vehicle.global_basis.y.dot(Vector3.UP) > 0.9 and game.vehicle.grounded_wheels == 4, "Recovery restores an inverted vehicle to a grounded lane")

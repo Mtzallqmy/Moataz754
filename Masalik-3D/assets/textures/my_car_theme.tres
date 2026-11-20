@@ -1,0 +1,100 @@
+[gd_resource type="Theme" load_steps=8 format=3]
+
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansArabic-Regular.ttf" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="Regular"]
+content_margin_left = 18.0
+content_margin_top = 4.0
+content_margin_right = 18.0
+content_margin_bottom = 4.0
+bg_color = Color(0.085, 0.112, 0.153, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.32, 0.37, 0.42, 0.9)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_left = 12
+corner_radius_bottom_right = 12
+
+[sub_resource type="StyleBoxFlat" id="Active"]
+content_margin_left = 18.0
+content_margin_top = 4.0
+content_margin_right = 18.0
+content_margin_bottom = 4.0
+bg_color = Color(0.16, 0.20, 0.26, 0.98)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.88, 0.66, 0.37, 0.95)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_left = 12
+corner_radius_bottom_right = 12
+
+[sub_resource type="StyleBoxFlat" id="Focus"]
+draw_center = false
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.91, 0.71, 0.43, 0.95)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_left = 12
+corner_radius_bottom_right = 12
+
+[sub_resource type="StyleBoxFlat" id="Disabled"]
+content_margin_left = 18.0
+content_margin_top = 4.0
+content_margin_right = 18.0
+content_margin_bottom = 4.0
+bg_color = Color(0.068, 0.082, 0.105, 0.87)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_left = 12
+corner_radius_bottom_right = 12
+
+[sub_resource type="StyleBoxFlat" id="Panel"]
+content_margin_left = 16.0
+content_margin_top = 16.0
+content_margin_right = 16.0
+content_margin_bottom = 16.0
+bg_color = Color(0.057, 0.078, 0.108, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.40, 0.31, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_left = 15
+corner_radius_bottom_right = 15
+
+[sub_resource type="StyleBoxFlat" id="Primary"]
+content_margin_left = 18.0
+content_margin_top = 4.0
+content_margin_right = 18.0
+content_margin_bottom = 4.0
+bg_color = Color(0.84, 0.62, 0.36, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_left = 12
+corner_radius_bottom_right = 12
+
+[resource]
+default_font = ExtResource("1")
+default_font_size = 20
+Button/colors/font_color = Color(0.94, 0.93, 0.89, 1)
+Button/colors/font_disabled_color = Color(0.54, 0.56, 0.58, 1)
+Button/styles/disabled = SubResource("Disabled")
+Button/styles/focus = SubResource("Focus")
+Button/styles/hover = SubResource("Active")
+Button/styles/normal = SubResource("Regular")
+Button/styles/pressed = SubResource("Active")
+PanelContainer/styles/panel = SubResource("Panel")
+PrimaryButton/base_type = &"Button"
+PrimaryButton/colors/font_color = Color(0.11, 0.09, 0.05, 1)
+PrimaryButton/styles/normal = SubResource("Primary")

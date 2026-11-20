@@ -26,7 +26,7 @@ window/handheld/orientation=4
 
 [gui]
 
-theme/custom_font="res://assets/fonts/NotoSansArabic-Regular.ttf"
+theme/custom="res://assets/textures/my_car_theme.tres"
 
 [physics]
 
@@ -70,4 +70,28 @@ drive_reverse={
 drive_camera={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":67)]
+}
+drive_clutch={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":88)]
+}
+drive_shift_up={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":69)]
+}
+drive_shift_down={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":81)]
+}
+drive_horn={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":72)]
+}
+drive_lights={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":76)]
+}
+drive_map={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":77)]
 }

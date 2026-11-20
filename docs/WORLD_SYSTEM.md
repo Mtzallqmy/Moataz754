@@ -4,4 +4,4 @@ The native route is sampled at four horizontal meters and grouped into thirty 50
 
 Road lane markings, foothills, a coastal ribbon, desert trails and scattered scenery are generated locally. An original stone tower is built in Blender and committed as a glTF binary. Roadside scatter is batched into MultiMesh instances. Traffic pools up to ten cars and adjusts speed to curvature and same-lane gaps. The world clock changes sky, ambient light and sun angle. Preset weather changes fog, surface shading and vehicle friction.
 
-This route uses a single connected corridor. True junctions, traffic overtaking, tunnel interiors, bridges, a full terrain LOD hierarchy and broader city blocks are outstanding. See [Test results](TEST_RESULTS.md) for verified collision and streaming behavior.
+This route uses a single connected corridor. The corridor includes a short mountain tunnel and an estuary bridge. True junctions, traffic overtaking, a full terrain LOD hierarchy and broader city blocks are outstanding. See [Test results](TEST_RESULTS.md) for verified collision and streaming behavior.

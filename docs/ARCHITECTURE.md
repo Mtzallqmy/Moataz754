@@ -17,3 +17,9 @@ Source audit baseline: a8595b76e302a39086f8b46532a0cce517b590d5 on main. The roo
 | Older engineering reports | Documented only in part | Treat the source tree and test results as authoritative where reports describe unconnected features. |
 
 Godot 4.7.2 and Jolt handle native simulation. The Compatibility renderer targets GLES 3.0; APK manifest inspection establishes the actual minimum API. Native gameplay reads bundled resources and user storage only.
+
+## Integrated runtime
+
+The native menu enters either a free drive or a mission in the same driving scene. The selected original fleet ID supplies the vehicle physics and geometry. The route spline drives sector loading, lane traffic, recovery, regional themes and the offline map. Physical progress through ordered checkpoint gates determines mission completion. Garage purchases, paint, driving settings, records and active attempts are stored with same-directory staged writes and a validated previous copy. The save manager can import a JSON export from the original web app. Web-only settings are outside the native migration.
+
+For Android export and release, see [Android build](ANDROID_BUILD.md). For measured checks, see [Test results](TEST_RESULTS.md).
