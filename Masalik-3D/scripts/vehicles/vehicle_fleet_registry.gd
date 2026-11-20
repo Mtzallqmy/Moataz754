@@ -2,6 +2,11 @@ class_name VehicleFleetRegistry
 extends RefCounted
 
 # Vehicle IDs and specifications retained from src/game/vehicleFleet.ts.
+const PAINTS := [Color("#bd723b"), Color("#233352"), Color("#39564a"), Color("#a93337"), Color("#d0c7b6"), Color("#1c232a")]
+const COMPOUNDS := ["all_terrain", "road", "sand", "mud"]
+const COMPOUND_NAMES := ["متعدد الاستخدام", "طريق", "رمل", "وحل"]
+const RIDE_STEPS := [0.0, -0.045, 0.045]
+
 const IDS := ["shahiq", "saqr", "rahhal", "madina", "jabal", "barq", "hafilat", "munqidh", "badiya", "aseel"]
 const FLEET_SPECS := {
 	"shahiq": {
@@ -123,7 +128,7 @@ static func canonical_id(id: String) -> String:
 	return id if FLEET_SPECS.has(id) else "shahiq"
 
 
-static func build_config(id: String) -> VehiclePhysicsConfig:
+static func build_config(id: String, tuning: Dictionary = {}) -> VehiclePhysicsConfig:
 	var spec: Dictionary = FLEET_SPECS[canonical_id(id)]
 	var config := VehiclePhysicsConfig.new()
 	config.mass_kg = spec.base_mass_kg
@@ -136,7 +141,10 @@ static func build_config(id: String) -> VehiclePhysicsConfig:
 	config.width = spec.width
 	config.length = spec.length
 	config.roof_height = spec.roof
-	config.suspension_rest_length = spec.rest
+	var height := clampi(int(tuning.get("native_ride", 0)), 0, RIDE_STEPS.size() - 1)
+	config.suspension_rest_length = float(spec.rest) + RIDE_STEPS[height]
+	var tire := clampi(int(tuning.get("native_tire", 0)), 0, COMPOUNDS.size() - 1)
+	config.tire_compound = COMPOUNDS[tire]
 	config.suspension_max_travel = spec.travel
 	config.spring_stiffness = spec.spring
 	config.spring_damping = spec.damper
@@ -160,3 +168,8 @@ static func build_config(id: String) -> VehiclePhysicsConfig:
 		config.ratios = PackedFloat32Array([5.34, 3.72, 2.72, 1.99, 1.5, 1.17, 0.96, 0.77])
 		config.final_drive = 4.37
 	return config
+
+
+static func paint_for(id: String, tuning: Dictionary) -> Color:
+	var index := int(tuning.get("native_paint", -1))
+	return PAINTS[index] if index >= 0 and index < PAINTS.size() else Color(FLEET_SPECS[canonical_id(id)].paint)

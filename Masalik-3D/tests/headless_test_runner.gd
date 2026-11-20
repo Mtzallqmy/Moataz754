@@ -208,6 +208,11 @@ func _player_experience(game: Node3D) -> void:
 		views[camera.current_view] = true
 		camera.cycle_camera_view()
 	check(views.size() == 6, "Six in-game camera views are available")
+	game._toggle_pause()
+	game.hud.diagnostics_requested.emit()
+	check(game.hud.overlay_open() and game.hud._overlay.get_child(0).get_child(0).text.contains("FPS"), "Pause menu exposes local performance diagnostics")
+	game.hud._overlay.get_child(0).get_child(-1).pressed.emit()
+	game._toggle_pause()
 
 	game._save()
 	check(persistence.save_data.has_driven and FileAccess.file_exists(persistence.SAVE_PATH_PRIMARY), "Free drive writes a native save")
@@ -225,6 +230,14 @@ func _player_experience(game: Node3D) -> void:
 	garage.call("_select", 0)
 	garage.call("_cycle_paint")
 	check(persistence.save_data.vehicle_customizations.has("shahiq"), "Garage paint is persistent")
+	garage.call("_cycle_tires")
+	garage.call("_cycle_ride")
+	check(garage.get("_model").config.tire_compound == "road" and garage.get("_model").config.suspension_rest_length < 0.63, "Garage tire and ride presets update the physics configuration")
+	persistence.save_data.vehicle_states["shahiq"].damage_state.body = 70.0
+	garage.call("_repair_selected")
+	check(persistence.save_data.vehicle_states["shahiq"].damage_state.body == 100.0, "Garage repair restores persisted condition")
+	persistence.tuning_set("shahiq", "native_tire", 0)
+	persistence.tuning_set("shahiq", "native_ride", 0)
 	menu.call("_close_detail")
 	menu.call("_show_settings")
 	check(menu.get("_body").get_child_count() > 10, "Settings exposes functional controls")

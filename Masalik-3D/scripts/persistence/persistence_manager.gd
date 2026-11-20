@@ -34,6 +34,7 @@ var save_data: Dictionary = {
 	],
 	"best_records": {},
 	"vehicle_customizations": {},
+	"vehicle_states": {},
 	"last_world_state": {
 		"s_meters": 60.0,
 		"lateral_offset": 0.0,
@@ -266,3 +267,24 @@ func _merge_browser_save(web: Dictionary) -> void:
 
 func _nonnegative_number(value: Variant, fallback: int) -> int:
 	return maxi(0, int(value)) if value is float or value is int else fallback
+
+
+func vehicle_tuning(id: String) -> Dictionary:
+	var fields: Variant = save_data.vehicle_customizations.get(id, {})
+	return fields if fields is Dictionary else {}
+
+
+func tuning_set(id: String, field: String, value: int) -> void:
+	var custom := vehicle_tuning(id)
+	custom[field] = value
+	save_data.vehicle_customizations[id] = custom
+	save_data_atomic()
+
+
+func repair_vehicle(id: String) -> bool:
+	if not own_vehicle(id):
+		return false
+	var state: Dictionary = save_data.vehicle_states.get(id, {})
+	state["damage_state"] = {"engine": 100.0, "suspension": 100.0, "tires": 100.0, "body": 100.0, "cooling": 100.0}
+	save_data.vehicle_states[id] = state
+	return save_data_atomic()

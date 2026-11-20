@@ -24,10 +24,6 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=4
 
-[gui]
-
-theme/custom="res://assets/textures/my_car_theme.tres"
-
 [physics]
 
 3d/physics_engine="Jolt Physics"

@@ -16,6 +16,7 @@ signal wipers_requested
 signal horn_requested
 signal ignition_requested
 signal descent_requested
+signal diagnostics_requested
 signal photo_requested
 signal photo_move(direction: float)
 signal photo_capture_requested
@@ -48,6 +49,7 @@ var _wheel: Control
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	var frame := Control.new()
+	frame.theme = preload("res://assets/textures/my_car_theme.tres")
 	_frame = frame
 	add_child(frame)
 	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -88,7 +90,7 @@ func _ready() -> void:
 	_button(frame, "استعادة", Vector2(0, 0), Rect2(26, 20, 126, 52)).pressed.connect(recovery_requested.emit)
 
 	_pause = PanelContainer.new()
-	_place(frame, _pause, Vector2(0.5, 0.5), Rect2(-172, -88, 344, 176))
+	_place(frame, _pause, Vector2(0.5, 0.5), Rect2(-172, -142, 344, 284))
 	_pause.mouse_filter = Control.MOUSE_FILTER_STOP
 	var menu := VBoxContainer.new()
 	_pause.add_child(menu)
@@ -110,6 +112,7 @@ func _ready() -> void:
 	photo.text = "وضع التصوير"
 	photo.pressed.connect(photo_requested.emit)
 	menu.add_child(photo)
+	_mini_button(menu, "الأداء", diagnostics_requested.emit)
 	_pause.hide()
 
 	_options = HBoxContainer.new()

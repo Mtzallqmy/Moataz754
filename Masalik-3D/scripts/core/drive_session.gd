@@ -1,8 +1,8 @@
 extends Node3D
 
+const METRICS := preload("res://scripts/core/performance_monitor.gd")
 const HUD := preload("res://scripts/ui/drive_hud.gd")
 const MENU_SCENE := "res://scenes/main/MainMenu.tscn"
-const PAINTS := [Color("#bd723b"), Color("#233352"), Color("#39564a"), Color("#a93337"), Color("#d0c7b6"), Color("#1c232a")]
 
 @onready var road: MountainRoadGenerator = $SummitRoadWorld
 @onready var vehicle: RaycastVehicleBody = $SUV4x4
@@ -24,15 +24,16 @@ var _waypoint := -1.0
 var _photo := false
 var _track_label := ""
 var _resume_attempt: Dictionary = {}
+var _metrics: Node
 
 
 func _enter_tree() -> void:
 	var car := $SUV4x4 as RaycastVehicleBody
 	var spec: Dictionary = QualityManager.active_mission
 	car.vehicle_id = VehicleFleetRegistry.canonical_id(spec.get("vehicle", str(PersistenceManager.save_data.selected_vehicle_id)))
-	if not spec.is_empty() and spec.get("cargo", 0) > 0:
-		car.config = VehicleFleetRegistry.build_config(car.vehicle_id)
-		car.config.mass_kg += car.config.cargo_limit * float(spec.cargo) * 0.01
+	car.config = VehicleFleetRegistry.build_config(car.vehicle_id, PersistenceManager.vehicle_tuning(car.vehicle_id))
+	if not spec.is_empty():
+		car.config.mass_kg += car.config.cargo_limit * float(spec.get("cargo", 0)) * 0.01
 
 
 func _ready() -> void:
@@ -55,11 +56,12 @@ func _ready() -> void:
 	elif QualityManager.resume_drive:
 		var saved: Dictionary = data.last_world_state
 		_checkpoint = clampf(float(saved.get("s_meters", 20.0)), 8.0, road.road_length_m - 8.0)
-		_restore_vehicle(saved)
+		var state: Dictionary = data.vehicle_states.get(vehicle.vehicle_id, saved)
+		_restore_vehicle(state)
+	else:
+		_restore_vehicle(data.vehicle_states.get(vehicle.vehicle_id, {}))
 
-	var paint := int(data.vehicle_customizations.get(vehicle.vehicle_id, {}).get("native_paint", -1))
-	if paint >= 0 and paint < PAINTS.size():
-		vehicle.get_node("VehicleVisual").paint.albedo_color = PAINTS[paint]
+	vehicle.get_node("VehicleVisual").paint.albedo_color = VehicleFleetRegistry.paint_for(vehicle.vehicle_id, PersistenceManager.vehicle_tuning(vehicle.vehicle_id))
 	vehicle.powertrain.manual = data.transmission_type == "manual"
 	vehicle.abs_enabled = data.Driving_realism != "simulation"
 	vehicle.tcs_enabled = data.Driving_realism != "simulation"
@@ -93,6 +95,8 @@ func _restore_vehicle(saved: Dictionary) -> void:
 				vehicle.condition[part] = clampf(float(wear), 0.0, 100.0)
 
 func _setup_hud() -> void:
+	_metrics = METRICS.new()
+	add_child(_metrics)
 	hud = HUD.new()
 	add_child(hud)
 	hud.reverse_requested.connect(_toggle_reverse)
@@ -114,6 +118,7 @@ func _setup_hud() -> void:
 	hud.photo_requested.connect(_toggle_photo)
 	hud.photo_move.connect(func(direction: float): camera.orbit += direction * 0.24)
 	hud.photo_capture_requested.connect(_capture_photo)
+	hud.diagnostics_requested.connect(_show_diagnostics)
 
 
 func _physics_process(delta: float) -> void:
@@ -248,6 +253,9 @@ func _save() -> void:
 	data.last_world_state.s_meters = _checkpoint
 	data.last_world_state.fuel_liters = vehicle.powertrain.fuel
 	data.last_world_state.damage_state = vehicle.condition.duplicate()
+	data.vehicle_states[vehicle.vehicle_id] = {
+		"fuel_liters": vehicle.powertrain.fuel, "damage_state": vehicle.condition.duplicate(),
+	}
 	data.has_driven = true
 	data.has_driven_recorded = true
 	PersistenceManager.save_data_atomic()
@@ -395,3 +403,17 @@ func _capture_photo() -> void:
 	if error != OK:
 		push_warning("Could not save photo: %s" % error_string(error))
 	hud.show()
+
+
+func _show_diagnostics() -> void:
+	var values: Dictionary = _metrics.get_metrics()
+	var output := Label.new()
+	output.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	output.add_theme_font_size_override("font_size", 21)
+	output.text = "الأداء\nFPS %d  •  %.2f ms\nالفيزياء %.2f ms  •  %d draw calls\nالذاكرة %.1f MiB\nالقطاعات %d  •  المرور %d" % [
+		values.fps, values.frame_time_ms, values.physics_time_ms, values.draw_calls, values.static_mem_mb,
+		road.stream.loaded_chunks.size(), traffic.active_count()]
+	var content := hud.show_overlay(output)
+	_add_overlay_button(content, "عودة", func():
+		hud.hide_overlay()
+		hud.show_pause(true))

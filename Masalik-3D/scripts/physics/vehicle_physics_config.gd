@@ -14,6 +14,7 @@ extends Resource
 @export var cargo_limit := 250.0
 @export var drag_area := 1.08
 @export var rolling_resistance := 0.012
+var tire_compound := "all_terrain"
 
 @export_group("Suspension")
 @export var suspension_rest_length := 0.64

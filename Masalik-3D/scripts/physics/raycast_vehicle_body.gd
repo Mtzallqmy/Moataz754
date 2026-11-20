@@ -2,6 +2,11 @@ class_name RaycastVehicleBody
 extends RigidBody3D
 
 const TIRE_STEPS := 8
+const TIRE_COMPOUNDS := {
+	"road": {"asphalt": Vector2(1.09, 0.88), "wet_asphalt": Vector2(1.03, 0.92), "sand": Vector2(0.76, 1.21), "mud": Vector2(0.68, 1.22)},
+	"sand": {"asphalt": Vector2(0.91, 1.08), "sand": Vector2(1.24, 0.68), "mud": Vector2(0.91, 1.04)},
+	"mud": {"asphalt": Vector2(0.90, 1.11), "gravel": Vector2(1.08, 0.94), "mud": Vector2(1.29, 0.69)},
+}
 const SURFACE_PROPERTIES := {
 	"asphalt": Vector2(1.0, 1.0), "wet_asphalt": Vector2(0.74, 1.12),
 	"gravel": Vector2(0.76, 2.5), "dirt": Vector2(0.67, 2.8),
@@ -223,6 +228,8 @@ func _apply_wheel(index: int, drive_torque: float, speed: float, delta: float) -
 	var surface := str(collider.get_meta("surface_type", "asphalt")) if collider != null else "asphalt"
 	current_surface = surface
 	var ground: Vector2 = SURFACE_PROPERTIES.get(surface, SURFACE_PROPERTIES.asphalt)
+	var compound: Dictionary = TIRE_COMPOUNDS.get(config.tire_compound, {})
+	ground *= compound.get(surface, Vector2.ONE)
 	var opposite := index ^ 1
 	var bar := (compression[index] - compression[opposite]) * config.anti_roll_stiffness if contact[opposite] else 0.0
 	var load := maxf(0.0, normal_load[index] + bar)

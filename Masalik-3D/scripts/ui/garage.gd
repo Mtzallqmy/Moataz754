@@ -1,7 +1,6 @@
 extends VBoxContainer
 
 const FLEET_SCENE := "res://scenes/vehicles/fleet_vehicle.tscn"
-const PAINTS := [Color("#bd723b"), Color("#233352"), Color("#39564a"), Color("#a93337"), Color("#d0c7b6"), Color("#1c232a")]
 
 var _selected := "shahiq"
 var _model: RaycastVehicleBody
@@ -10,6 +9,9 @@ var _camera: Camera3D
 var _info: Label
 var _purchase: Button
 var _paint: Button
+var _tires: Button
+var _height: Button
+var _repair: Button
 var _orbit := 0.8
 var _zoom := 7.5
 
@@ -76,6 +78,10 @@ func _ready() -> void:
 	_paint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_paint.pressed.connect(_cycle_paint)
 	actions.add_child(_paint)
+	_tires = _customize_button(actions, _cycle_tires)
+	_height = _customize_button(actions, _cycle_ride)
+	_repair = _customize_button(actions, _repair_selected)
+	_repair.text = "إصلاح"
 	_select(vehicles.selected)
 
 
@@ -85,6 +91,7 @@ func _select(index: int) -> void:
 		_model.queue_free()
 	_model = (load(FLEET_SCENE) as PackedScene).instantiate()
 	_model.vehicle_id = _selected
+	_model.config = VehicleFleetRegistry.build_config(_selected, PersistenceManager.vehicle_tuning(_selected))
 	_model.freeze = true
 	_model.process_mode = Node.PROCESS_MODE_DISABLED
 	_preview.add_child(_model)
@@ -102,7 +109,14 @@ func _refresh() -> void:
 	if owned and VehicleFleetRegistry.canonical_id(PersistenceManager.save_data.selected_vehicle_id) == _selected:
 		_purchase.text = "المركبة المختارة"
 		_purchase.disabled = true
-	_paint.disabled = not owned
+	var tuning := PersistenceManager.vehicle_tuning(_selected)
+	_tires.text = VehicleFleetRegistry.COMPOUND_NAMES[clampi(int(tuning.get("native_tire", 0)), 0, 3)]
+	_height.text = ["ارتفاع قياسي", "مخفّض", "مرتفع"][clampi(int(tuning.get("native_ride", 0)), 0, 2)]
+	for button in [_paint, _tires, _height, _repair]:
+		button.disabled = not owned
+	var state: Dictionary = PersistenceManager.save_data.vehicle_states.get(_selected, {})
+	if state.get("damage_state") is Dictionary:
+		_info.text += "  •  حالة الهيكل %d%%" % roundi(float(state.damage_state.get("body", 100.0)))
 
 
 func _purchase_or_select() -> void:
@@ -113,20 +127,38 @@ func _purchase_or_select() -> void:
 
 
 func _cycle_paint() -> void:
-	var custom: Dictionary = PersistenceManager.save_data.vehicle_customizations
-	var fields: Dictionary = custom.get(_selected, {})
-	var next := (int(fields.get("native_paint", -1)) + 1) % PAINTS.size()
-	fields["native_paint"] = next
-	custom[_selected] = fields
-	PersistenceManager.save_data_atomic()
+	var current := int(PersistenceManager.vehicle_tuning(_selected).get("native_paint", -1))
+	PersistenceManager.tuning_set(_selected, "native_paint", (current + 1) % VehicleFleetRegistry.PAINTS.size())
 	_apply_paint()
 
 
+func _cycle_tires() -> void:
+	var current := int(PersistenceManager.vehicle_tuning(_selected).get("native_tire", 0))
+	PersistenceManager.tuning_set(_selected, "native_tire", (current + 1) % VehicleFleetRegistry.COMPOUNDS.size())
+	_select(VehicleFleetRegistry.IDS.find(_selected))
+
+
+func _cycle_ride() -> void:
+	var current := int(PersistenceManager.vehicle_tuning(_selected).get("native_ride", 0))
+	PersistenceManager.tuning_set(_selected, "native_ride", (current + 1) % VehicleFleetRegistry.RIDE_STEPS.size())
+	_select(VehicleFleetRegistry.IDS.find(_selected))
+
+
+func _repair_selected() -> void:
+	PersistenceManager.repair_vehicle(_selected)
+	_refresh()
+
+
+func _customize_button(parent: Container, handler: Callable) -> Button:
+	var button := Button.new()
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(button)
+	button.pressed.connect(handler)
+	return button
+
+
 func _apply_paint() -> void:
-	var fields: Dictionary = PersistenceManager.save_data.vehicle_customizations.get(_selected, {})
-	var selected := int(fields.get("native_paint", -1))
-	if selected >= 0 and selected < PAINTS.size():
-		_model.get_node("VehicleVisual").paint.albedo_color = PAINTS[selected]
+	_model.get_node("VehicleVisual").paint.albedo_color = VehicleFleetRegistry.paint_for(_selected, PersistenceManager.vehicle_tuning(_selected))
 
 
 func _orbit_input(event: InputEvent) -> void:

@@ -2,7 +2,7 @@
 
 Godot 4.7.2.stable.official.ed1daf0bf and Jolt on desktop Linux. The automated suite uses 60 fixed physics ticks per second. These are simulation measurements.
 
-The import, startup and integration gates completed. The integration run passed **71 checks**, with **zero failures**. It exercised native boot, four wheel contacts, flat idle, acceleration, braking, explicit reverse, steering, relayed multitouch events, streaming and collision at seven route locations, rain traction, traffic pooling, camera availability, map routing, garage and paint, mission start and continuation, a physically driven mission finish, v2 web save import, staged-save interruption and backup recovery.
+The import, startup and integration gates completed. The integration run passed **74 checks**, with **zero failures**. It exercised native boot, four wheel contacts, flat idle, acceleration, braking, explicit reverse, steering, relayed multitouch events, streaming and collision at seven route locations, rain traction, traffic pooling, camera availability, local performance diagnostics, map routing, garage, tire compounds, suspension height, repair and paint, mission start and continuation, a physically driven mission finish, v2 web save import, staged-save interruption and backup recovery.
 
 | Vehicle | Mass | 0–100 km/h | Stop distance |
 | --- | ---: | ---: | ---: |
