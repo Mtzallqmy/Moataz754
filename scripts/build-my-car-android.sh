@@ -46,10 +46,10 @@ apk="$temporary/signed.apk"
 "$tools/zipalign" -c -P 16 4 "$apk"
 "$tools/apksigner" verify --verbose --print-certs "$apk" | tee "$temporary/certificate.txt"
 "$tools/aapt" dump badging "$apk" > "$temporary/badging.txt"
-rg -q "^package: name='com\.moataz\.masalik'" "$temporary/badging.txt"
-rg -q "^sdkVersion:'26'$" "$temporary/badging.txt"
-rg -q "^native-code: 'arm64-v8a'$" "$temporary/badging.txt"
-if rg -q "uses-permission.*android\.permission\.(INTERNET|ACCESS_NETWORK_STATE)" "$temporary/badging.txt"; then
+grep -Eq "^package: name='com\.moataz\.masalik'" "$temporary/badging.txt"
+grep -Eq "^sdkVersion:'26'$" "$temporary/badging.txt"
+grep -Eq "^native-code: 'arm64-v8a'$" "$temporary/badging.txt"
+if grep -Eq "uses-permission.*android\.permission\.(INTERNET|ACCESS_NETWORK_STATE)" "$temporary/badging.txt"; then
   printf 'Unexpected network permission in APK.\n' >&2
   exit 1
 fi
@@ -57,13 +57,13 @@ if [[ "$mode" == release ]]; then
   expected="$(tr -d ':' <<< "$MYCAR_EXPECTED_CERT_SHA256" | tr '[:upper:]' '[:lower:]')"
   actual="$(awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}' "$temporary/certificate.txt")"
   [[ "$expected" =~ ^[0-9a-f]{64}$ && "$actual" == "$expected" ]]
-  if rg -q '^application-debuggable' "$temporary/badging.txt"; then
+  if grep -Eq '^application-debuggable' "$temporary/badging.txt"; then
     printf 'Release APK is debuggable.\n' >&2
     exit 1
   fi
 fi
 cp -- "$apk" "$output"
 (cd -- "$(dirname -- "$output")" && sha256sum -- "$(basename -- "$output")" > "$(basename -- "$output").sha256")
-cat "$temporary/badging.txt" | rg "^package:|^sdkVersion:|^targetSdkVersion:|^native-code:|^uses-permission:"
+grep -E "^package:|^sdkVersion:|^targetSdkVersion:|^native-code:|^uses-permission:" "$temporary/badging.txt"
 ls -lh -- "$output"
 cat -- "$output.sha256"

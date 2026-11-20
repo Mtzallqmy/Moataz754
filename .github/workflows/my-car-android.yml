@@ -12,6 +12,7 @@ permissions:
   contents: read
 
 env:
+  ANDROID_TOOLS_SHA256: 7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
   GODOT_VERSION: 4.7.2
   GODOT_TAG: 4.7.2-stable
   GODOT_LINUX_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
@@ -32,7 +33,20 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Configure Android build tools
-        run: sdkmanager 'build-tools;36.1.0' 'platforms;android-36'
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/android-sdk"
+          archive="$RUNNER_TEMP/android-command-line-tools.zip"
+          curl --fail --location --retry 3 --silent --show-error \
+            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip -o "$archive"
+          printf '%s  %s\n' "$ANDROID_TOOLS_SHA256" "$archive" | sha256sum -c -
+          mkdir -p "$sdk/cmdline-tools"
+          unzip -q "$archive" -d "$RUNNER_TEMP/android-tools"
+          mv "$RUNNER_TEMP/android-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
+          manager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          (set +o pipefail; yes | "$manager" --sdk_root="$sdk" --licenses)
+          "$manager" --sdk_root="$sdk" 'build-tools;36.1.0' 'platforms;android-36'
+          printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$sdk" "$sdk" >> "$GITHUB_ENV"
       - name: Install verified Godot and matching templates
         run: |
           set -euo pipefail

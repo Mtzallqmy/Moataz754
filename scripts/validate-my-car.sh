@@ -16,7 +16,7 @@ run_check() {
     return 1
   fi
   cat "$log"
-  if rg -q '^((SCRIPT )?ERROR:|WARNING:.*leak|FAIL )' "$log"; then
+  if grep -Eq '^((SCRIPT )?ERROR:|WARNING:.*leak|FAIL )' "$log"; then
     return 1
   fi
 }

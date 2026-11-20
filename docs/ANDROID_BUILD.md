@@ -4,7 +4,7 @@ The Android app is exported from `Masalik-3D/` with official Godot 4.7.2 stable 
 
 ## Local build
 
-Install JDK 17 or a compatible JDK, Android SDK Build Tools 36.1.0, Python 3, ripgrep and the pinned Godot version. Install the matching official export templates. Configure the Android and Java SDK paths in Godot Editor Settings and set `ANDROID_HOME` or `ANDROID_SDK_ROOT` for the shell.
+Install JDK 17 or a compatible JDK, Android SDK Build Tools 36.1.0, Python 3 and the pinned Godot version. Install the matching official export templates. Configure the Android and Java SDK paths in Godot Editor Settings and set `ANDROID_HOME` or `ANDROID_SDK_ROOT` for the shell.
 
 ```bash
 scripts/validate-my-car.sh
